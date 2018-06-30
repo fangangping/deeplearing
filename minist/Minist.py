@@ -40,13 +40,13 @@ class MinistDataset(data.Dataset):
         return int(codecs.encode(b, 'hex'), 16)
 
     def __getitem__(self, index):
-        if train:
+        if self.train:
             return self.train_img[index], self.train_labels[index]
         else:
             return self.test_img[index], self.test_labels[index]
 
     def __len__(self):
-        if train:
+        if self.train:
             return 60000
         else:
             return 10000
@@ -72,13 +72,13 @@ class Net(nn.Module):
         x = self.maxPooling(x)
         x = x.view(-1, 14 * 14 * 6)
         x = F.relu(self.fc1(x))
+        x = F.dropout(x, training=self.training)
         x = F.relu(self.fc2(x))
         return F.log_softmax(x, dim=1)
 
 
-def train(model):
-    train_dataloader = torch.utils.data.DataLoader(MinistDataset(root='.', train=True), batch_size=10)
-    optimizer = optim.SGD(model.parameters(), lr=10e-5)
+def train(model, train_dataloader, test_dataloader):
+    optimizer = optim.Adam(model.parameters(), lr=10e-6)
     model.train()
     time = 0
     for batch_index, (img, label) in enumerate(train_dataloader):
@@ -89,11 +89,30 @@ def train(model):
         optimizer.step()
         if time % 100 == 0:
             print('loos ' + str(loss))
-        if time == 1000:
+            test(model, test_dataloader)
+        if time >= 5000:
             break
         time += 1
     with open('model', 'wb') as f:
         torch.save(model.state_dict(), f)
 
 
-train(Net())
+def test(model, test_dataloader):
+
+    model.eval()
+    correct = 0
+    print(len(test_dataloader.dataset))
+
+    with torch.no_grad():
+        for (img, label) in test_dataloader:
+            output = model(img)
+            pred = output.max(1)[1]
+            #print(pred.eq(label).sum()
+            correct += pred.eq(label).sum().item()
+
+    print('correct ' + str(correct/10000))
+
+net = Net()
+train_dataloader = torch.utils.data.DataLoader(MinistDataset(root='../dataset', train=True), batch_size=32)
+test_dataloader = torch.utils.data.DataLoader(MinistDataset(root='../dataset', train=False), batch_size=10)
+train(net, train_dataloader, test_dataloader)
